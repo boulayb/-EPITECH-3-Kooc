@@ -1,0 +1,32 @@
+/*
+** main.kc for  in /home/zordan_n/Kooc/test/part2
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Thu Oct 13 11:31:36 2016 Nicolas Zordan
+** Last update Mon Oct 17 13:37:55 2016 Nicolas Zordan
+*/
+
+#include <stdio.h>
+@import "StackInt.kh"
+
+int             main(int ac, char **av)
+{
+  StackInt      *my_stack;
+
+  my_stack = [StackInt new : 4242];
+  [my_stack push :10];
+  [StackInt push :my_stack :11];
+  [my_stack push :12];
+  [my_stack push :14];
+  while ([my_stack nbitem] > 0) {
+    printf("Elem remaining = %d\n", [my_stack nbitem]);
+    printf("Poped = %d\n\n", [my_stack pop]);
+  }
+  [my_stack delete];
+  StackInt      local_stack;
+  [&local_stack init : 4242];
+  [&local_stack push : 33];
+  return (0);
+}

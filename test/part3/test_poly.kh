@@ -1,0 +1,32 @@
+/*
+** test_poly.kh for  in /home/zordan_n/Kooc/test/part3
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Sat Oct 15 23:42:20 2016 Nicolas Zordan
+** Last update Sat Oct 15 23:45:53 2016 Nicolas Zordan
+*/
+
+@class A
+{
+  @member {
+    int         value;
+    void        init();
+    @virtual void       print();
+  }
+}
+
+@class B : A
+{
+  @member int   value;
+  @member void  init();
+  @virtual void print();
+}
+
+@class C : B
+{
+  @member int   value;
+  @member void  init();
+  @virtual void print();
+}

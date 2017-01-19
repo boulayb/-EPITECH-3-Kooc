@@ -1,0 +1,71 @@
+/*
+** test_poly.kc for  in /home/zordan_n/Kooc/test/part3
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Sat Oct 15 23:46:20 2016 Nicolas Zordan
+** Last update Sat Oct 15 23:58:12 2016 Nicolas Zordan
+*/
+
+#include <stdio.h>
+@import "test_poly.kh"
+
+@implementation A
+{
+  @member void  init()
+  {
+    [super init];
+    [self.value] = 42;
+  }
+
+  @virtual void print()
+  {
+    int         value;
+    char        *name;
+
+    name = [self.name_of_interface];
+    value = [self.value];
+    print("%d %s\n", value, name);
+  }
+}
+
+@implementation B
+{
+  @member void  init()
+  {
+    [super init];
+    [self.value] = 124;
+  }
+
+  @virtual void print()
+  {
+    int         value;
+    char        *name;
+
+    name = [self.name_of_interface];
+    value = [self.value];
+    printf("%d %s\n", value, name);
+  }
+}
+
+@implementation C
+{
+  @member {
+    void        init()
+    {
+      [super init];
+      [self.value] = 666;
+    }
+
+    @virtual void       print()
+    {
+      int       value;
+      char      *name;
+
+      name = [self.name_of_interface];
+      value = [self.value];
+      printf("%d %s\n", value, name);
+    }
+  }
+}

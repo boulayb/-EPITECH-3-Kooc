@@ -1,0 +1,29 @@
+/*
+** TestClass.kh for  in /home/zordan_n/Kooc/test
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Wed Oct 12 13:22:45 2016 Nicolas Zordan
+** Last update Sat Oct 15 23:04:04 2016 Nicolas Zordan
+*/
+
+@class StackInt
+{
+  @member
+    {
+      int       size;
+      int       nbitem;
+
+      void      init(int);
+      void      init();
+      void      clean();
+      int       nbitem();
+    }
+
+  @member int   *data;
+  @member void  push(int);
+  int           pop(StackInt *);
+
+  int           nbStack;
+};

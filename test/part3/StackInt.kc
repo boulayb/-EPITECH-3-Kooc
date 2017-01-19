@@ -1,0 +1,56 @@
+/*
+** StackInt.kc for  in /home/zordan_n/Kooc/test
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Wed Oct 12 13:33:00 2016 Nicolas Zordan
+** Last update Sat Oct 15 23:36:45 2016 Nicolas Zordan
+*/
+
+#include <stdlib.h>
+@import "StackInt.kh"
+
+@implementation StackInt
+{
+  @member void          init(int size)
+  {
+    int                 *buf;
+
+    [super init :size];
+    buf = (int *) calloc(size, sizeof(int));
+    [self.data] = buf;
+  }
+
+  @member void          push(int i)
+  {
+    int                 pos;
+    int                 *buf;
+
+    pos = [self.nbitem];
+    buf = [self.data];
+    buf[pos++] = i;
+    [self.nbitem] = pos;
+  }
+
+  @member int           pop()
+  {
+    int                 *buf;
+    int                 pos;
+    int                 r;
+
+    pos = [self.nbitem];
+    buf = [self.data];
+    r = buf[pos--];
+    [self.nbitem] = pos;
+    return (r);
+  }
+
+  @member void          clean()
+  {
+    int                 *buf;
+
+    buf = [self.data];
+    free(buf);
+  }
+}

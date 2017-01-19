@@ -1,0 +1,37 @@
+/*
+** test.kh for test in /home/zordan_n/Kooc/test
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Fri Sep 30 14:24:20 2016 Nicolas Zordan
+   Last update Wed Oct 19 03:57:54 2016 alice
+*/
+
+#include <stdbool.h>
+#include <unistd.h>
+#include <string.h>
+
+@module Test
+{
+  void          f(void);
+  int           f(int nb1);
+  int           f(float nb1, float nb2);
+  char          *f(int nb);
+
+  typedef char  un_zob;
+
+  int           a;
+  char		a;
+  double	a;
+  float         a = 4.2;
+  void          *a = NULL;
+  char          *const *volatile *a[];
+}
+
+typedef int     zobi;
+
+@module Toto
+{
+  int           a = 21;
+}

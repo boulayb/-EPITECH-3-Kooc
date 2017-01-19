@@ -1,0 +1,28 @@
+/*
+** main.kc for test in /home/zordan_n/Kooc/test
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Fri Sep 30 14:37:41 2016 Nicolas Zordan
+** Last update Fri Sep 30 16:17:36 2016 Nicolas Zordan
+*/
+
+#include <stdio.h>
+@import "Test.kh"
+@import "Test.kh"
+@import "Test.kh"
+@import "Test.kh"
+@import "Test.kh"
+@import "Test.kh"
+@import "Test.kh"
+@import "Test.kh"
+
+int             main(int ac, char *const av[])
+{
+//  @!(int)[Test.a] = (int)(@!(float)[Test.a]);
+//    int i = zob(1);
+     int	i = @!(int)[Test f : (int)1];
+     @!(int)[Test f : (float)i : (float)i];
+  return (0);
+}

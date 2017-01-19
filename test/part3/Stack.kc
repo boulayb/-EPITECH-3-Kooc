@@ -1,0 +1,29 @@
+/*
+** Stack.kc for  in /home/zordan_n/Kooc/test/part3
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Sat Oct 15 23:07:26 2016 Nicolas Zordan
+** Last update Wed Oct 19 00:40:41 2016 Nicolas Zordan
+*/
+
+@import "Stack.kh"
+
+@implementation Stack
+{
+  @member {
+
+    void        init(int size)
+    {
+      [self.size] = size;
+    }
+
+    int         nbitem()
+    {
+      int       n;
+
+      n = [self.nbitem];
+      return (n);
+    }
+}

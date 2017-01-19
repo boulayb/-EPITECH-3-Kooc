@@ -1,0 +1,1103 @@
+\documentclass[frenchb]{report}
+
+%%\LoadClass[a4paper]{report}
+
+\newcommand\tab[1][1cm]{\hspace*{#1}}
+
+\usepackage[frenchb]{babel}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{titlesec}
+\usepackage{graphicx}
+\usepackage{csquotes}
+\usepackage{array}
+\usepackage{fast-diagram}
+
+\graphicspath{ {picture/} }
+\title{Documentation: Projet Kooc}
+\author{Victor Schuchmann, Alice Pesty, Nicolas Zordan et Arnaud Boulay}
+
+
+\titleformat
+    {\chapter}
+    [display]
+    {\bfseries\Large\itshape}
+    {Partie No. \ \thechapter}
+    {0.5ex}
+    {
+      \rule{\textwidth}{1pt}
+      \vspace{1ex}
+      \centering
+    }
+    [
+      \vspace{-0.5ex}
+      \rule{\textwidth}{0.3pt}
+    ]
+
+\begin{document}
+
+\begin{titlepage}
+  \maketitle
+\end{titlepage}
+
+\tableofcontents
+\pagebreak
+
+\chapter{Introduction}
+\vspace{10mm}
+\begin{minipage}{10cm}
+  Le Kooc, ou Kind of objective C est un projet qui consiste en la création d'une surcouche au langage C, permettant d'y ajouter des fonctionalités présentes dans certains langages orienté object tels que le c++ ou le java.
+  Ce projet est proposé dans le cadre du module KOOC, du 26 septembre au 20 novembre 2016.
+  Nous avons realisé ce projet à l'aide des outils pyrser et Cnorm. Cette documentation permettra d'expliquer le fonctionnement de notre Kooc, ainsi que de partager les choix de conceptions qui ont été faits lors de sa réalisation.
+\end{minipage}
+
+\chapter{Le fonctionnement}
+L'éxécutable Kooc est un compilateur qui va transformer des fichiers dont le langage source est le langage Kooc en langage C fonctionnel et compilable à partir d'un compilateur C tel que gcc.
+
+Pour lancer la compilation, il suffit de passer en paramètre à l'éxécutable Kooc le nom d'un fichier Kooc (.kc ou .kh) tout autre extension sera ignorée.
+
+Dans un premier temps, le compilateur va lire le fichier et le parser selon les différentes directives Kooc qui vont être rencontrées, pour générer un arbre de syntaxe comportant du code Kooc. Pour cela, on utilise
+
+Une fois l'arbre généré, il va être transformé pour être rendu compatible au langage C.
+
+Une fois l'arbre complètement transformé en fonctions des directives kooc, il va être utilisé pour générer du code C grace à l'outil to\_c() de cnorm.
+
+\chapter{Les modules}
+\section{Introduction}
+Dans un premier temps, nous avons dû réaliser l'implementation des directives kooc suivantes:
+@import, @module et @implementation.\\
+
+Ce sont des directives qui sont propres à notre langage kooc et non au C, et donc non reconnues par Cnorm qui est un outil permettant de générer un arbre de syntaxe à partir de code C. Pour pouvoir inclure nos directives dans l'arbre généré par Cnorm habituellement, nous avons du modifier certaines règles de Cnorme et en ajouter d'autres.\\
+
+Lorsque Cnorm parse un fichier écrit en C, la première règle appelée est la règle \enquote{translation\_unit}. Elle appelle ensuite la règle \enquote{declaration} qui elle vérifie les déclarations en c, en assembleur ou bien les directives de préprocessing. Nous avons donc modifié cette règle en lui ajoutant les règles qui nous seront nécéssaires pour reconnaitre nos directives kooc. On a alors:\\
+
+\noindent
+declaration = {[}\\
+\tab  Declaration.declaration\\
+\tab  | import\_decl\\
+\tab  | module\_decl\\
+\tab  | implem\_decl\\
+\tab  | class\_decl\\
+      {]}\\
+
+Les 4 règles que nous avons ajouté nous permettent de récupérer les différentes directives kooc ainsi que le code écrit dans le scope de ces directives.
+
+Les trois premières règles seront traitées dans cette premère partie, mais la suivante sera abordée dans les parties qui suivent.
+
+\section{@import} \noindent
+
+La directive Kooc @import est en quelque sorte l'équivalent Kooc de la directive de préprocessing \#include en C, c'est à dire qu'elle permet d'importer un fichier à l'extension .kh dans un fichier à l'extension .kc, de la même manière que \#include permet d'importer un fichier à l'extension .h dans un fichier d'extension .c. La différence entre les deux directives est que la directive @import doit empêcher d'elle même la double inclusion, ce que ne fait pas \#include.\\
+
+\noindent
+La syntaxe de la règle dans la BNF qui permet de récupérer la directive se présente de la manière suivante:\\
+
+\noindent
+import\_decl = {[}\\
+  \tab '@import' string:fichierAImporter \#import\_file(\_, fichierAImporter)\\
+  {]}\\
+
+Lorsqu'une directive @import est rencontrée, la première chose à faire est de remplacer dans l'arbre généré la directive kooc par la directive de préprocessing correspondante, soit \#include suivi du nom de fichier que l'on a récupéré après la directive kooc en remplaçant l'extension .kh par l'extension .h.\\
+
+Il faut ensuite lancer le parsing du fichier .kh grace à la fonction parse\_file de pyrser, ce qui nous permettra d'obtenir un arbre à partir des elements du fichier .kh ainsi qu'un dictionnaire des modules et des classes importés. C'est à partir de ce dictionnaire que nous allons pouvoir vérifier que rien n'est inclu plusieurs fois.
+
+\section{@module}
+
+La directive Kooc @module sert à définir un scope dans lequel seront groupées dans un même ensembles des variables et des fonctions.
+Le module permet d'ajouter au C la possibilité de déclarer des variables et des fonctions possédant le même nom, tant que la signature est differente.\\
+
+\noindent
+Pour récupérer la directive @module, on ajoute à la BNF la règle suivante:\\
+
+\noindent
+module\_decl = {[}\\
+\tab '@module' id:nomModule \\
+\tab '\{'\\
+\tab {[} \\
+\tab \tab {[} c\_decl {]}:content\\
+\tab \tab \#add\_content(\_, content)\\
+\tab {]}* \\
+\tab '\}'\\
+  {]}\\
+
+Lorsque l'on rencontre la directive @module, la première étape est de parser le bloc de déclaration kooc pour générer un ast ensuite. Lors de ce parsing, plusieurs dictionnaires vont être créés en plus de l'arbre: un contenant les noms des differentes variables, un second contenant le noms des differentes fonctions et enfin un contenant les variables définies dans le module. En effet ces dernières ne peuvent qu'être déclarées dans le module, la déclaration, elle, ne peut être fait que dans l'implémentation du module (grace à la directive @implementation).\\
+
+La deuxième étape consiste en la transformation de l'arbre obtenu en un arbre traduisible en langage C, ce qui n'est pas le cas à la fin de l'étape de parsing. En effet, il est impossible en C de déclarer plusieurs variables ou fonctions du même nom, même lorsque les signatures diffèrent. C'est pourquoi les noms doivent êtres modifiés, c'est ce que nous appelons le mangling ou décoration des noms. Ce mangling suit une certaine grammaire:\\
+
+\noindent
+\_tailleNomModule\\
+nomModule\\
+\_type\\
+
+\noindent
+\textbf{\{Si c'est une fonction\}}\\
+tailleNomFonction\\
+nomFonction\\
+\_{[}typeParam{]}*\\
+
+\noindent
+\textbf{\{Si c'est une variable\}}\\
+tailleNomVar\\
+nomVar\\
+
+\noindent
+Et voici un exemple de variables et de fonctions manglées (toutes les fonctions et les variables sont contenues dans un module que l'on appelera test):\
+
+\noindent
+\textit{int var1 --> \_4test\_i4var1}\\
+\textit{volatile char *const var2 --> \_4test\_KPVc4var2}\\
+\textit{short int func1(int p1) --> \_4test\_s5func1\_i}\\
+
+\noindent
+\textit{Pour une structure:}\\
+\textit{Struct s\{int i; char *str;\}}\\
+\textit{void *func2(struct s p1) --> \_4test\_Pv5func2\_TiPc}\\
+
+Enfin, une fois manglées, il faut ajouter aux variables déclarées le mot clé ``extern'' qui permet de définir ces variables en tant que variables globales au programme.
+Certains qualifiers tels que ``const'' ou volatile, lorsqu'ils ne sont pas rattachés à un pinteur ne sont pas pris en compte dans la décoration, car ils ne sont pas differanciables
+Pour un exemple de traduction de module en langage C ainsi que plus de précision sur les symboles de mangling, se référer à l'annexe 1.
+
+\section{@implementation}
+La directive kooc @implementation correspond à la définition des variables et des fonctions qui ont été déclarées dans le module ou la classe correspondante. Les variables qui avaient été définie dans le module/classe doivent donc être ``déplacées'' dans la partie implementation.\\
+
+\noindent
+On récupère cette directive grace à la règle suivante:\\
+
+\noindent
+implem\_decl = {[}\\
+  \tab '@implem' id:nomModuleAImplem\\
+  \tab compound\_statement:content\\
+  \tab \#implementation(\_, nomModuleAImplem, content)\\
+  {]}\\
+
+Lors de l'implementation se posent plusieurs problemes. En effet, cette directive est ce qui va permettre d'utiliser ce qui à été déclaré dans un module ou une classe, or il a été dit que le module et la classe (dont nous parlerons dans la partie suivante) permettaient de déclarer plusieurs fonctions ou variables possèdant le même nom (mais pas la même signature). Cela étant impossible en C, nous avons en partie pallié au problème avec le mangling des noms, il se pose cependant toujours le problème de savoir quelle variante appeler et à quel moment.\\
+
+En kooc, l'accès au variables et fonctions d'un module/classe se fait grace aux opérateurs crochets, et c'est à cet endroit précis que doit se déterminer le type de l'attribut auquel on veux accèder (voir la partie typage).\\
+
+\chapter{Les classes}
+\section{Introduction}
+Dans cette deuxième partie, nous avons du réaliser les classes. A l'instar de la directive module, la directive @class ouvre un scope dans le quel il va etre possible de déclarer des variable et des fonction, à la seule différence que ces attributs vont maintenant avoir la possibilité d'être déclarés en tant qu'attributs membres, cela grace à la directive @member.\\
+
+\section{Définition}
+La classe est définie en Kooc par la directive @class et les attributs membres grace à @member (@member peut s'appliquer à un seul attribut ou à un bloc de déclaration, de la même manière que @module ou @class). Ces deux directives sont récupérées réspectivement grace aux règles suivantes:\\
+
+\noindent
+classe\_decl = {[}\\
+\tab '@class' id:nomClasse \\
+\tab {[}\\
+\tab \tab ':' id:nomClasseParent\\
+\tab {]}\\
+\tab '\{'\\
+\tab {[} \\
+\tab \tab {[} c\_decl | member\_decl | virtual\_decl {]}:content\\
+\tab \tab \#add\_content(\_, content)\\
+\tab {]}* \\
+\tab '\}'\\
+  {]}\\
+
+\noindent
+member\_decl = {[}\\
+\tab '@member'\\
+\tab '\{'?\\
+\tab {[} \\
+\tab \tab {[} c\_decl {]}:content\\
+\tab \tab \#add\_content(\_, content)\\
+\tab {]}* \\
+\tab '\}'?\\
+     {]}\\
+
+Lorsque la directive @class est rencontre, le parsing va être éffectué de manière similaire à celui du module, à la différence que dans une classe, les attributs ayant été marqués comme membres vont êtres sauvegardés dans un autre dictionnaire, ce qui permettra de pouvoir créér une structure de donnée contenant les variables membres lors de la transformation de l'arbre pour en faire un arbre à partir du quel il est possible de générer du code C.\\
+
+Les fonctions membres quant à elles sont traitées de la même manière que les attributs non membres éxcepté que ces fonctions on toutes pour premier paramètre un pointeur sur la classe, qui sera appelé \_\_self, et que nous rajouterons nous même.\\
+
+En ce qui concerne la partie mangling que nous avions vu lors de la récupération d'un module, elle est appliquée exactement de la même manière pour les attributs non membres ainsi que pour les fonctions membres, les variables membres quant à elles seront manglées à l'interieur de la structure, dont le nom sera, lui aussi, manglé.\\
+
+\section{Allocation et initialisation}
+
+Outre le fait de pouvoir déclarer des attributs membres, la classe possède une autre particularité, qui réside dans la manière dont elle est allouée et initialisée.\\
+
+En effet, 5 fonctions doivent toujours être mise à disposition de l'utilisateur de la classe:\\
+
+\noindent
+La fonction \textbf{alloc}:\\
+\tab La fonction alloc quant à elle ne sert qu'à allouer de la mémoire à une instance de\\
+\tab classe, et n'initialise pas le contenu de l'objet.\\
+
+\noindent
+La fonction \textbf{init}:\\
+\tab Cette fonction doit toujours être appelée lors de la création d'une instance d'une classe.\\
+\tab Elle n'alloue pas de mémoire et sert uniquement à initialiser les attributs de la classe.\\
+\tab L'utilisateur peut la définir en créant sa classe, lui faire prendre les paramètres de son\\
+\tab choix ainsi que l'implémenter comme il le souhaite, toutefois, si l'utilisateur ne définie\\
+\tab pas la fonction lui même, une fonction init par défaut doit être crée. Elle correspond à\\
+\tab ce que l'on appelle un constructeur. C'est dans la fonction init que le pointeur sur la \\
+\tab vtable sera initialisée à la valeure de la vtable correspondant au type de l'instance.\\
+
+\noindent
+La fonction \textbf{new}:\\
+\tab Cette fonction a pour but d'allouer de la mémoire à une instance de classe puis à\\
+\tab l'initialiser. Elle prend les mêmes paramètres que la fonction init() (qu'elle appelle)\\
+\tab et retourne un pointeur sur une nouvelle instance de la classe en appelant la fonction\\
+\tab alloc(). Il doit donc y avoir autant de fonction new que de fonctions init (une\\
+\tab pour chaque signature)\\
+
+\noindent
+La fonction \textbf{clean}:\\
+\tab Cette fonction est la fonction qui est appelée lorsqu'une instance de classe est détruite,\\
+\tab elle correspond au destructeur. Dans cette fonction, les attributs auquels il a été\\
+\tab attribué de la mémoire doivent être libérés. Cependant cette fonction n'a pas pour but de\\
+\tab libérer la mémoire prise par l'instance de la classe, seulement son contenu.\\
+
+\noindent
+La fonction \textbf{delete}:\\
+\tab La fonction delete est l'inverse de la fonction new. Là où la fonction new alloue et\\
+\tab initialise, la fonction delete détruit les données de l'instance et libère l'espace\\
+\tab qu'elle prend. Tout comme la fonction new appelle la fonction init, la fontion delete\\
+\tab appelle la fonction clean.\\
+
+Sont ajoutées à ces fonctions:
+
+\noindent
+La fonction \textbf(name\_of\_interface)
+\tab Cette fonction ne prend rien en paramètre et renvoie le nom du type réel de l'instance\\
+\tab  sous forme de chaine de char.
+
+\noindent
+La fonction \textbf(isKindOf)
+\tab
+
+\noindent
+La fonction \textbf(isInstanceOf)
+
+C'est après le parsing du bloc de la classe que l'on s'occupe de créer ces fonctions.
+Grace au dictionnaire de fonctions que l'on récupère après le parsing, il est possible de vérifier que la fonctions init a été déclarée au moins une fois.
+Si elle n'a jamais été déclarée, alors elle est créée par défaut avec les fonctions new et delete, clean et alloc puis elles sont injectées dans l'arbre.\\
+
+\noindent
+Si au contraire elle à été définie une fois ou plus, alors pour chaque fonction init une fonction new est créée avec la même signature, c'est à dire avec les même paramètres. Elles sont ensuite injectées dans l'arbre avec les autres fonctions.\\
+
+\noindent
+Pour un exemple de traduction de code Kooc en code C, se referer à l'annexe 2.
+
+\chapter{L'héritage et le polymorphisme}
+\section{Introduction}
+Dans cette troisième partie, les fonctionalités que nous avons ajoutées au C consistent en la possibilité de faire hériter une classe d'une autre ainsi que le polymorphisme. Nous ne parlerons dans cette partie que d'héritage simple.\\
+
+La syntaxe pour indiquer l'héritage d'une classe est ``: nomClasseParent'' après le nom de la classe fille. Pour le polymorphisme, on va utiliser la directive Kooc @virtual qui sera définie par la règle suivante:\\
+
+\noindent
+virtual\_decl = {[}\\
+\tab '@virtual'\\
+\tab '\{'?\\
+\tab {[} \\
+\tab \tab {[} c\_decl {]}:content\\
+\tab \tab \#add\_content(\_, content)\\
+\tab {]}* \\
+\tab '\}'?\\
+     {]}\\
+
+Tout comme la directive @member, la directive @virtual peut s'appliquer à un bloc de fonctions ou bien à un seul attribut, cependant, à la différence de la directive @member, @virtual ne s'applique qu'aux fonctions, qui deviennent des fonctions membre.\\
+
+\section{Héritage}
+Lorsque nous récuperons une classe, la première chose qui va être éffectuée est de vérifier si elle hérite ou non d'une autre classe. Si tel est le cas, le nom de la classe parente vas être récupéré dans un noeud de l'arbre au moment du parsing. On vérifie également l'existence de cette classe parente dans le dictionaire de classe que l'on a récupéré lors du parsing. Si la classe parente n'existe pas, on arrete le parsing, sinon le parsing continuera ensuite sur le reste de la classe.\\
+
+Le parsing fini, on va créer un typdef sur le nom manglé de la structure avec son nom initial pour que le type existe dans d'autres fichiers.
+Lors de la création de la structure contenant les attributs membres de la classe, il sera vérifié si la classe hérite d'une autre classe et, si tel est le cas, les premiers éléments qui seront mis dans la structure seront les attributs de la classe parents, puis ceux de la classe fille, en ayant vérifié qu'aucun attribut ne soit déclaré plusieurs fois à l'interieur de chaque classe.\\
+
+Une classe qui hérite d'une autre hérite non seulement de ses attributs mais aussi de ses fonctions. C'est pourquoi ce qui suit la création de la structure est la concaténation des dictionaires de fonctions membres de la classe parente et celui de la classe fille\\
+
+\section{Polymorphisme}
+Il se pose cependant un problème de redéclaration de fonctions, dans le cas ou la classe fille souhaiterait réimplémenter une fonction de la classe mère. En effet une classe fille peut réimplémenter une fonction de la classe mère, toutefois, il est possible de se retrouver dans le cas ou l'on possède un pointeur dont le type apparent est celui de la classe mère mais dont le type réel est en fait celui de la classe fille.
+
+Dans ce cas la, si une fonction est redéfinie dans la classe fille, c'est à celle ci que nous voulons acceder, mais ayant un pointeur sur la classe mère, c'est à celle définie dans la classe mère que nous accedons.
+
+Pour pallier à ce problème, on va utiliser la directive kooc @virtual, qui signifie que l'implémentation de la fonction déclarée en virtuelle écrase celle de la classe mère.\\
+
+Afin de garder trace de quelle fonction appeller selon le type de la classe, chaque classe va contenir un pointeur sur une structure de pointeur sur fonction que l'on appelle vtable. Cette structure va contenir les addresses de toutes les fonctions virtuelles qui correspondent à l'instance et seulement ces fonctions. C'est au niveau de la fonction init que la vtable est initialisée, ainsi quel que soit le type apparent, ce sera toujours la fonction correspondant au type réel qui sera appelée.\\
+
+Seront ajoutées à la vtable : le destructeur, la fonction name\_of\_interface(), les fonctions isKindOf() et isInstanceOf().
+
+\noindent
+pour un exemple de traduction de code Kooc en code C, se référer à l'annexe 3.
+
+\chapter{Le typage}
+\section{Introduction}
+Le Kooc, contrairement au C, permet la surcharge de variables et de fonctions. Nous devons donc fournir un moyen de trouver la bonne version manglée de la fonction ou de la variable à utiliser dans une situation précise en fonction du type attendu. C'est le rôle du typage.\\
+
+Soit deux variables ``nb'' dans un module ``M'', l'une de type ``int'' l'autre de type ``float''. Si l'utilisateur veut affecter à cette variable nb la valeur entière ``42'' et qu'il ne précise pas le type de la variable à l'aide de la syntaxe ``@!(TYPE)'', alors, le compilateur Kooc doit comprendre que l'utilisateur cherche à stocker un type ``int'' et donc automatiquement fournir la version ``int'' manglée de la variable nb.
+Si l'utilisateur utilise la variable ``nb'' à l'intérieur d'un ``if'', ``while'' ou ``for'', la version ``int'' de la variable ``nb'' sera utilisée afin de simuler au plus proche un type booléen.\\
+
+Cette démarche étant la même pour les fonctions et leurs types de retour, nous pouvons nous retrouver dans des situations de ce genre :\\
+
+\noindent
+\textbf{Dans le .kh}\\
+\noindent
+@module M\\
+\{\\
+\tab  int   nb;\\
+\tab   float nb;\\
+
+\noindent
+\tab   int   func(int, float);\\
+\tab   float func(float, float);\\
+\}\\
+
+\noindent
+@implementation M\\
+\{\\
+\tab   int   func(int i, float f)\\
+\tab   \{\\
+\tab \tab     return (i + (int)f);\\
+\tab   \}\\
+
+\noindent
+\tab   float func(float f1, float f2)\\
+\tab   \{\\
+\tab \tab     return (f1 + f2);\\
+\tab   \}\\
+\}\\
+
+\noindent
+\textbf{Dans le .kc}\\
+\noindent
+@import M.kh\\
+
+\noindent
+int     main(void)\\
+\{\\
+\tab   {[}M.nb{]} = 42;\\
+\tab   {[}M.nb{]} = 4.2;\\
+
+\noindent
+\tab   {[}M.nb{]} = {[}M func :42 :{[}M func :{[}M.nb{]} :4.2{]}{]};\\
+\tab   return (0);\\
+\}\\
+
+Le compilateur Kooc doit alors déterminer dans quelle version de la variable ``nb'' stocker 42, 4.2 ainsi que le retour d'une version de la fonction ``func''. Cette démarche s'effectuera en deux étapes.
+
+\section{Stockage de données}
+La première étape consiste à garder trace de chaque variable et fonctions déclarées ainsi que lerus équivalents manglés. Pour cela nous utilisons plusieurs couches de dictionnaire que nous remplissons au moment du parsing afin de construire un arbre.\\
+
+\noindent
+Concept d'arbre :\\
+{[} {]} = dico\\
+" " = str\\
+( ) = liste\\
+
+\noindent
+Soit: \\
+
+\noindent
+\textit{Modules{[}``module name'': (functions{[} {]}, vars{[} {]}){]}}\\
+
+Un dictionaire de modules ayant pour clef le nom du module et pour valeur une liste de dictionnaire chacun décrit ci dessous.\\
+
+\noindent
+\textit{fucntions{[}``func name'': {[}``mangled func'' : {[} ``ret'': ``ret type'', ``p1'': ``p1 type'', ``p2'': ``p2 type''{]}{]}{]}}\\
+
+Un dictionnaire de fonctions ayant pour clef le vrai nom de la fonction (pour accès rapide) et pour valeur un autre dictionnaire.
+Chaque sous dictionnaire porte comme clef une version manglée du nom de la fonction et contient en valeurs les types de chaque paramètres et celui de la valeur de retour (sous forme d'un troisième sous dictionnaire).\\
+
+\noindent
+\textit{Vars{[}``var name'': {[}``mangled var'' : ``type'', ``mangled var'': ``type''{]}{]}}\\
+
+Un dictionnaire de variable ayant pour clef le vrai nom de la variable (pour accés rapide)) et pour valeur un autre dictionnaire.
+Chaque sous dictionnaire porte comme clef une version manglée du nom de la variable et contient en valeurs le type de cette variable manglée.\\
+
+Un fois l'arbre rempli, nous pouvons facilement accéder à chaque version manglée de chaque variable ou fonctions simplement grâce à son nom.\\
+
+\section{Intersection des types}
+Afin de retrouver la bonne version d'une variable ou fonction, il suffit de réaliser une intersection entre les types possibles et les types de notre arbre. Reprenons l'exemple en annexe.\\
+
+Ce procédé se doit d'être  récursif afin de traiter les cas les plus éloignés dans une expression en premier (la variable ``nb'' passé en paramètre du deuxième appel de fonction dans le cas de l'exemple) puis de remonter jusqu'au bout de l'expression même (l'assignation de variable ``nb'' dans l'exemple).\\
+
+Lors de cas complexes, il se peut qu'une ambiguïté se créé et qu'il soit impossible de déterminer un type exacte à retourner. C'est le cas de la variable ``nb'' passé en paramètre du deuxième appel de la fonction dans l'exemple. Il est impossible de choisir entre sa version ``int'' ou ``float'' étant donné les deux versions de ``func''. Cependant, nous savons que si ``func'' prend en premier paramètre un ``int'' il ne peut que prendre un ``float'' en deuxième paramètre. Nous pouvons donc en déduire par intersection que le deuxième appel à ``func'' en paramètre du premier appel ne peux retourner qu'un ``float'' et nous savons donc quelle version choisir ainsi que le type de ``nb'' en paramètre.\\
+
+Pour résumer, en premier lieu, la résolution du paramètre ``nb'' retournera un bout de l'abre de données (dictionnaire) contenant toutes les versions possibles de ``nb'' pour cette résolution, puis lors de l'intersection de ``func'' passé en paramètre, les possibilités de ``nb'' dans le bout de dictionnaire seront ré-évaluée pour n'en choisir qu'une.\\
+
+Si une fois arrivé à la fin de l'expression nous ne pouvons toujours pas déterminer le type et/ou n'avont qu'un bout de dictionnaire contenant les différentes possibilités, une erreur est alors lévée par le compilateur.\\
+\\
+
+\noindent
+Voici un exemple absrait de ce que donnerait la résolution de cet exemple étape par étape :\\
+\\
+
+\noindent
+nb = func(42, func(nb, 4.2));\\
+int || float = func(42, func(int || float, 4.2));\\
+int || float = func(42, int(int || float, 4.2) || float(int || float), 4.2));\\
+int || float = func(42, float(int || float, 4.2));\\
+int || float = func(42, float(float, 4.2));\\
+int || float = int(42, float(float, 4.2));\\
+int = int(42, float(float, 4.2));\\
+\\
+
+Cette mécanique conclu donc la résolution de type pour le projet Kooc.\\
+
+\chapter{Annexe}
+\section{Diagrame Fast}
+\includegraphics[scale=0.58]{fast_kooc.jpg}
+\section{Traduction partie 1}
+\subsection{Module}
+
+\noindent
+\textbf{Un exemple de module:}\\
+@module Test\\
+\{\\
+\tab  void          f(void);\\
+\tab  bool          f(int nb1);\\
+\tab  int           f(float nb1, float nb2);\\
+\tab  char          *f(int nb);\\
+\tab  size\_t        f(const char *str) \{ return (strlen(str)); \}\\
+
+\noindent
+\tab typedef char  un\_test;\\
+
+\noindent
+\tab int           a;\\
+\tab float         a = 4.2;\\
+\tab void          *a = NULL;\\
+\tab char          *const *volatile *a{[}{]};\\
+\}\\
+
+\noindent
+\textbf{Et sa traduction en C:}\\
+void            \_4Test\_v1f\_v(void);\\
+bool            \_4Test\_4bool1f\_i(int nb1);\\
+int             \_4Test\_i1f\_ff(float nb1, float nb2);\\
+char            *\_4Test\_Pc1f\_i(int nb);\\
+inline size\_t   \_4Test\_6size\_t1f\_KPc(const char *str) \{ return (strlen(str)); \}\\
+typedef char    un\_test;\\
+extern int      \_4Test\_i1a;\\
+extern float    \_4Test\_f1a;\\
+extern void     *\_4Test\_Pv1a;\\
+extern char     *const *volatile *\_4Test\_PPPPc1a{[}{]};\\
+
+\subsection{Tableau des symboles de mangling}
+
+\begin{center}
+\begin{tabular} { || m{5cm} | m{5cm} || }
+\hline
+\textbf{Variable initiale} & \textbf{Equivalence manglée}\\
+\hline\hline
+void & v\\
+\hline
+char & c\\
+\hline
+unsigned char & C\\
+\hline
+unsigned int & I\\
+\hline
+unsigned short int & S\\
+\hline
+short int & s\\
+\hline
+int & i\\
+\hline
+long int & l\\
+\hline
+unsigned long int & L\\
+\hline
+long long & j\\
+\hline
+unsigned long long & J\\
+\hline
+float & f\\
+\hline
+double & d\\
+\hline
+long double & e\\
+\hline
+varargs & z\\
+\hline
+<expr>* OU <expr>* const & P<expr>\\
+\hline
+volatile <expr>* & PV<expr>\\
+\hline
+const & K\\
+\hline
+volatile & V\\
+\hline
+const volatile & KV\\
+\hline
+func pointer & P6 ReturnType {[}ParamType{]}*\\
+\hline
+struct & T {[}attributType{]}*\\
+\hline
+enum & E\\
+\hline
+union & U\\
+\hline
+\end{tabular}
+\end{center}
+
+\subsection{Implementation}
+
+\noindent
+\textbf{Un exemple d'implementation:}\\
+@implementation Test\\
+\{\\
+\tab  void          f(void)\\
+\tab  \{\\
+\tab \tab    printf("coucou la moulinette");\\
+\tab  \}\\
+
+  \noindent
+\tab  bool          f(int nb)\\
+\tab  \{\\
+\tab \tab    if (printf("NB = \%d", nb))\\
+\tab \tab \tab      return (false);\\
+\tab \tab   return (true);\\
+\tab  \}\\
+
+  \noindent
+\tab  int           f(float nb1, float nb2)\\
+\tab  \{\\
+\tab \tab    return ((int)(nb1 + nb2));\\
+\tab  \}\\
+
+  \noindent
+\tab  char          *f(int nb)\\
+\tab  \{\\
+\tab \tab    return (malloc(sizeof(char)) * ([Test f:4.2:4.3] * (int)@!(float)[Test a]));\\
+\tab  \}\\
+\}\\
+
+\noindent
+\textbf{Et sa traduction en C:}\\
+int     \tab \_4Test\_i1a;\\
+float   \tab \_4Test\_f1a = 4.2;\\
+void    \tab *\_4Test\_Pv1a = NULL;\\
+char    \tab *const *volatile *\_4Test\_PPPPc1a[];\\
+
+\noindent
+void            \_4Test\_v1f\_v(void)\\
+\{\\
+\tab printf("coucou la moulinette");\\
+\}\\
+
+\noindent
+bool            \_4Test\_4bool1f\_i(int nb)\\
+\{\\
+\tab  if (printf("NB = \%d", nb))\\
+\tab \tab    return (false);\\
+\tab  return (true);\\
+\}
+
+\noindent
+int             \_4Test\_i1f\_ff(float nb1, float nb2)\\
+\{\\
+\tab  return ((int)(nb1 + nb2));\\
+\}\\
+
+\noindent
+char            *\_4Test\_Pc1f\_i(int nb)\\
+\{\\
+\tab  return (malloc(sizeof(char) * (\_4Test\_i1f\_ff(4.2, 4.3)) * (int)\_4Test\_f1a));\\
+\}\\
+
+\section{Traduction partie 2}
+\noindent
+\textbf{Un exemple de déclaration de classe:}\\
+@class StackInt\\
+\{\\
+\tab  @member\\
+\tab \tab    \{\\
+\tab \tab \tab      int       \tab size;\\
+\tab \tab \tab      int       \tab nbitem;\\
+
+\noindent
+\tab \tab \tab      void      \tab init(int);\\
+\tab \tab \tab      void      \tab init();\\
+\tab \tab \tab      void      \tab clean();\\
+\tab \tab \tab      int       \tab nbitem();\\
+\tab \tab    \}\\
+
+\noindent
+\tab  @member int   \tab *data;\\
+\tab  @member void  \tab push(int);\\
+\tab  int           \tab pop(StackInt *);\\
+
+\noindent
+\tab  int           \tab nbStack;\\
+\};\\
+
+\noindent
+\textbf{Et sa traduction en C:}\\
+typedef struct \tab \_8StackInt\_      \tab StackInt;\\
+
+\noindent
+void                            \tab \_8StackInt\_v4init\_P8StackInti(StackInt *, int);\\
+void                            \tab \_8StackInt\_v4init\_P8StackInt(StackInt *);\\
+void                            \tab \_8StackInt\_v5clean\_P8StackInt(StackInt *);\\
+int                             \tab \_8StackInt\_i6nbitem\_P8StackInt(StackInt *);\\
+StackInt			\tab *\_8StackInt\_P8StackInt5alloc\_v(void);\\
+void                            \tab \_8StackInt\_v4push\_P8StackInti(StackInt *, int);\\
+void				\tab \_8StackInt\_v6delete\_P8StackInt(StackInt *);\\
+int                             \tab \_8StackInt\_i3pop\_P8StackInt(StackInt *);\\
+StackInt			\tab *\_8StackInt\_new\_v4init\_P8StackInti(int);\\
+StackInt			\tab *\_8StackInt\_new\_v4init\_P8StackInt();\\
+
+\noindent
+struct                          \tab \_8StackInt\_\\
+\{\\
+\tab  int                           \tab \_8StackInt\_i4size\_;\\
+\tab  int                           \tab \_8StackInt\_i6nbitem\_;\\
+\tab  int                           \tab *\_8StackInt\_Pi4data\_;\\
+\};\\
+
+\noindent
+extern int                      \tab \_8StackInt\_i6nbStack\_;\\
+
+\noindent
+\textbf{Un exemple d'implementation de classe:}\\
+@implementation StackInt\\
+\{\\
+\tab  @member int           init(int size)\\
+\tab  \{\\
+\tab \tab     int                 *buf;\\
+
+    \noindent
+\tab \tab     {[}self.nbitem{]} = 0;\\
+\tab \tab     {[}self.size{]} = size;\\
+\tab \tab     buf = (int *)calloc(size, sizeof(int));\\
+\tab \tab     {[}self.data{]} = buff;\\
+\tab   \}\\
+
+  \noindent
+\tab   @member int           init()\\
+\tab   \{\\
+\tab \tab     int                 *buf;\\
+
+    \noindent
+\tab \tab     {[}self.nbitem{]} = 0;\\
+\tab \tab     {[}self.size{]} = 2048;\\
+\tab \tab     buf = (int *)calloc(2048, sizeof(int));\\
+\tab \tab     {[}self.data{]} = buff;\\
+\tab   \}\\
+
+  \noindent
+\tab   @member\\
+\tab   \{\\
+\tab \tab     int               nbitem()\\
+\tab \tab     \{\\
+\tab \tab \tab       int             n;\\
+
+      \noindent
+\tab \tab \tab       n = {[}self.nbitem{]};\\
+\tab \tab \tab       return (n);\\
+\tab \tab     \}\\
+
+    \noindent
+\tab \tab     void              push(int i)\\
+\tab \tab     \{\\
+\tab \tab \tab       int             pos;\\
+\tab \tab \tab       int             *buf;\\
+
+    \noindent
+\tab \tab \tab       pos = {[}self.nbitem{]};\\
+\tab \tab \tab       buf = {[}self.data{]};\\
+\tab \tab \tab       buf{[}pos++{]} = i;\\
+\tab \tab \tab       {[}self.nbitem{]} = pos;\\
+\tab \tab     \}\\
+\tab   \}\\
+
+    \noindent
+\tab  int                   pop(StackInt *self)\\
+\tab   \{\\
+\tab \tab     int                 *buf;\\
+\tab \tab     int                 pos;\\
+\tab \tab     int                 r;\\
+
+    \noindent
+\tab \tab     pos = {[}self.nbitem{]};\\
+\tab \tab     buf = {[}self.data{]};\\
+\tab \tab     r = buff{[}--pos{]};\\
+\tab \tab     {[}self.nbitem{]} = pos;\\
+\tab \tab     return (r);\\
+\tab   \}\\
+
+  \noindent
+\tab   void                  clean(StackInt *this)\\
+\tab   \{\\
+\tab \tab     int                 *buf;\\
+
+    \noindent
+\tab \tab     buf = {[}this.data{]};\\
+\tab \tab     free(buf);\\
+\tab   \}\\
+\}\\
+
+\noindent
+\textbf{Et sa traduction en C:}\\
+int   \tab            \_8StackInt\_i6nbStack\_;\\
+
+\noindent
+void            \_8StackInt\_v4init\_P8StackInti(StackInt *\_\_self, int size)\\
+\{\\
+\tab  int           *buf;\\
+
+\noindent
+\tab  \_\_self->\_8StackInt\_i6nbitem\_ = 0;\\
+\tab    \_\_self->\_8StackInt\_i4size\_ = size;\\
+\tab    buf = (int *)calloc(size, sizeof(int));\\
+\tab    \_\_self->\_8StackInt\_Pi4data\_ = buf;\\
+\}\\
+
+\noindent
+void            \_8StackInt\_v4init\_P8StackInt(StackInt *\_\_self)\\
+\{\\
+\tab    int           *buf;\\
+
+\noindent
+\tab    \_\_self->\_8StackInt\_i6nbitem\_ = 0;\\
+\tab    \_\_self->\_8StackInt\_i4size\_ = 2048;\\
+\tab    buf = (int *)calloc(2048, sizeof(int));\\
+\tab    \_\_self->\_8StackInt\_Pi4data\_ = buf;\\
+\}\\
+
+\noindent
+void             \_8StackInt\_v5clean\_P8StackInt(StackInt *\_\_self)\\
+\{\\
+\tab    int           *buf;\\
+
+\noindent
+\tab    buf = \_\_self->\_8StackInt\_Pi4data\_;\\
+\tab    free(buf);\\
+\}\\
+
+\noindent
+int             \_8StackInt\_i6nbitem\_P8StackInt(StackInt *\_\_self)\\
+\{\\
+\tab    int           n;\\
+
+\noindent
+\tab    n = \_\_self->\_8StackInt\_i6nbitem\_;\\
+\tab    return (n);\\
+\}\\
+
+\noindent
+void            \_8StackInt\_v4push\_P8StackInti(StackInt *\_\_self, int i)\\
+\{\\
+\tab    int           pos;\\
+\tab    int           *buf;\\
+
+\noindent
+\tab    pos = \_\_self->\_8StackInt\_i6nbitem\_;\\
+\tab    buf = \_\_self->\_8StackInt\_Pi4data\_;\\
+\tab    buf{[}pos++{]} = i;\\
+\tab    \_\_self->\_8StackInt\_i6nbitem\_ = pos;\\
+\}\\
+
+\noindent
+int             \_8StackInt\_i3pop\_P8StackInt(StackInt *\_\_self)\\
+{
+\tab    int           *buf;\\
+\tab    int           pos;\\
+\tab    int           r;\\
+
+\noindent
+\tab    pos = \_\_self->\_8StackInt\_i6nbitem\_;\\
+\tab    buf = \_\_self->\_8StackInt\_Pi4data\_;\\
+\tab    r = buf{[}--pos{]};\\
+\tab    \_\_self->\_8StackInt\_i6nbitem\_ = pos;\\
+\tab    return (r);\\
+\}\\
+
+\noindent
+StackInt			*\_8StackInt\_alloc()\\
+\{\\
+\tab    return (malloc(sizeof(StackInt)));\\
+\}\\
+
+\noindent
+void				\_8StackInt\_delete(StackInt *\_\_self)\\
+\{\\
+\tab    \_8StackInt\_v5clean\_P8StackInt(\_\_self);\\
+\tab    free(\_\_self);\\
+\}\\
+
+\noindent
+StackInt			*\_8StackInt\_new\_v4init\_P8StackInti(int size)\\
+\{\\
+\tab    StackInt                      *\_\_elem;\\
+
+\noindent
+\tab    \_\_elem = \_8StackInt\_alloc();\\
+\tab    \_8StackInt\_v4init\_P8StackInti(\_\_elem, size);\\
+\tab    return (\_\_elem);\\
+\}\\
+
+\noindent
+StackInt			*\_8StackInt\_new\_v4init\_P8StackInt()\\
+\{\\
+\tab    StackInt                      *\_\_elem;\\
+
+\noindent
+\tab    \_\_elem = \_8StackInt\_alloc();\\
+\tab    \_8StackInt\_v4init\_P8StackInt(\_\_elem);\\
+\tab    return (\_\_elem);\\
+\}\\
+
+\section{Traduction partie 3}
+\noindent
+\textbf{Un exemple de déclaration d'une classe héritant d'une autre:}\\
+@class A\\
+\{\\
+\tab  @member
+\tab \{\\
+\tab \tab     int         value;\\
+\tab \tab     void        init();\\
+\tab \tab     @virtual void       print();\\
+\tab \}\\
+\}\\
+
+@class B : A\\
+\{\\
+\tab   @member int   value;\\
+\tab   @member void  init();\\
+\tab   @virtual void print();\\
+\}\\
+
+\noindent
+\textbf{Sa traduction en C:}\\
+/*  CLASS A */\\
+typedef struct \_1A\_    \tab  A;\\
+
+\noindent
+/* A MEMBER FUNCTIONS */\\
+void                  \tab  \_1A\_v4init\_P1A\_(A *);\\
+void                  \tab  \_1A\_v5print\_P1A\_(A *);\\
+
+\noindent
+/* A DEFAULT FUNCTIONS */\\
+const char            \tab  *\_1A\_Pc17name\_of\_interface\_v\_(void);\\
+A                     \tab  *\_1A\_P1A5alloc\_v\_(void);\\
+A                     \tab  *\_1A\_P1A3new\_v\_(void);\\
+void                  \tab  \_1A\_v6delete\_P1A\_(A *);\\
+void                  \tab  \_1A\_v5clean\_P1A\_(A *);\\
+
+\noindent
+/* A VTABLE */\\
+struct                  \_1A\_vtable\_\\
+\{\\
+\tab   const char            \tab *(*\_Pc17name\_of\_interface\_v\_)(void);\\
+\tab   void                  \tab (*\_v5clean\_P1A\_)(A *);\\
+\tab   void                  \tab (*\_v5print\_P1A\_)(A *);\\
+\};\\
+
+\noindent
+/* A CLASS */\\
+struct \tab                   \_\_attribute\_\_((packed)) \_1A\_\\
+\{\\
+\tab   struct \_1A\_vtable\_   \tab  *\_\_vtable;\\
+\tab   int                  \tab  \_1A\_i5value\_;\\
+\};\\
+/* !CLASS A */\\
+
+\noindent
+/*  CLASS B */\\
+typedef struct \_1B\_    \tab  B;\\
+
+\noindent
+/* B MEMBER FUNCTIONS */\\
+void                   \tab  \_1B\_v4init\_P1B\_(B *);\\
+void                   \tab  \_1B\_v5print\_P1B\_(B *);\\
+
+\noindent
+/* B DEFAULT FUNCTIONS */\\
+const char            \tab   *\_1B\_Pc17name\_of\_interface\_v\_(void);\\
+B                     \tab   *\_1B\_P1B5alloc\_v\_(void);\\
+B                     \tab   *\_1B\_P1B3new\_v\_(void);\\
+void                  \tab   \_1B\_v6delete\_P1B\_(B *);\\
+void                  \tab   \_1B\_v5clean\_P1B\_(B *);\\
+
+\noindent
+/* B VTABLE */\\
+struct                \tab   \_1B\_vtable\_\\
+\{\\
+  const char          \tab   *(*\_Pc17name\_of\_interface\_v\_)(void);\\
+  void                \tab   (*\_v5clean\_P1B\_)(B *);\\
+  void                \tab   (*\_v5print\_P1B\_)(B *);\\
+\};\\
+
+\noindent
+/* B CLASS */\\
+struct                 \tab  \_\_attribute\_\_((packed)) \_1B\_\\
+\{\\
+\tab   struct \_1B\_vtable\_   \tab  *\_\_vtable;\\
+\tab   int                  \tab \tab  \_1A\_i5value\_;\\
+\tab   int                  \tab \tab  \_1B\_i5value\_;\\
+\};\\
+/* !CLASS B */\\
+
+\noindent
+\textbf{Un exemple d'implémentation d'une classe héritant d'une autre:}\\
+@implementation A\\
+\{\\
+\tab  @member void  init()\\
+\tab   \{\\
+\tab \tab     {[}super init{]};\\
+\tab \tab     {[}self.value{]} = 42;\\
+\tab   \}\\
+
+\noindent
+\tab   @virtual void print()\\
+\tab   \{\\
+\tab \tab     int         value;\\
+\tab \tab     char        *name;\\
+
+\noindent
+\tab \tab     name = {[}self.name\_of\_interface{]};\\
+\tab \tab     value = {[}self.value{]};\\
+\tab \tab     print("\%d \%s", value, name);\\
+\tab   \}\\
+\}\\
+
+\noindent
+@implementation B\\
+\{\\
+\tab   @member void  init()\\
+\tab   \{\\
+\tab \tab     {[}super init{]};\\
+\tab \tab     {[}self.value{]} = 124;\\
+\tab   \}\\
+
+\noindent
+\tab   @virtual void print()\\
+\tab   \{\\
+\tab \tab     int         value;\\
+\tab \tab     char        *name;\\
+
+\noindent
+\tab \tab     name = {[}self.name\_of\_interface{]};\\
+\tab \tab     value = {[}self.value{]};\\
+\tab \tab     printf("\%d \%s", value, name);\\
+\tab   \}\\
+\}\\
+
+\noindent
+\textbf{Sa traduction en C:}\\
+/* A IMPLEMENTATION */\\
+/* A INIT */\\
+struct \_1A\_vtable\_      \_1A\_vtable\_ = \{\_1A\_Pc17name\_of\_interface\_v\_, \_1A\_v5clean\_P1A\_, \_1A\_v5print\_P1A\_};\\
+
+\noindent
+/* A MEMBER FUNCTIONS */\\
+void                    \_1A\_v4init\_P1A\_(A *\_\_self)\\
+\{\\
+\tab  \_\_self->\_1A\_i5value\_ = 42;\\
+\tab   \_\_self->\_\_vtable = \&\_1A\_vtable\_;\\
+\}\\
+
+\noindent
+void                    \_1A\_v5print\_P1A\_(A *\_\_self)\\
+\{\\
+\tab   int                   value;\\
+\tab   const char            *name = \_\_self->\_\_vtable->\_Pc17name\_of\_interface\_v\_();\\
+
+\noindent
+\tab   value = \_\_self->\_1A\_i5value\_;\\
+\tab   printf("\%d \%s", value, name);\\
+\}\\
+
+\noindent
+/* A DEFAULT FUNCTIONS */\\
+const char              *\_1A\_Pc17name\_of\_interface\_v\_(void)\\
+\{\\
+\tab   return ("A");\\
+\}\\
+
+\noindent
+A                       *\_1A\_P1A5alloc\_v\_(void)\\
+\{\\
+\tab   return (malloc(sizeof(A)));\\
+\}\\
+
+\noindent
+A                       *\_1A\_P1A3new\_v\_(void)\\
+\{\\
+\tab   A                     *res;\\
+
+\noindent
+\tab   res = \_1A\_P1A5alloc\_v\_();\\
+\tab   \_1A\_v4init\_P1A\_(res);\\
+\tab   return (res);\\
+\}\\
+
+\noindent
+void                    \_1A\_v6delete\_P1A\_(A *\_\_self)\\
+\{\\
+\tab   \_1A\_v5clean\_P1A\_(\_\_self);\\
+\tab   free(\_\_self);\\
+\}\\
+
+\noindent
+void                    \_1A\_v5clean\_P1A\_(A *\_\_self)\\
+\{\\
+\tab   \_1A\_v5clean\_P1A\_((A *)\_\_self);\\
+\}\\
+/* !A IMPLEMENTATION */\\
+
+\noindent
+/* B IMPLEMENTATION */\\
+/* B INIT */\\
+struct \_1B\_vtable\_      \_1B\_vtable\_ = \{\_1B\_Pc17name\_of\_interface\_v\_, \_1B\_v5clean\_P1B\_, \_1B\_v5print\_P1B\_\};\\
+
+\noindent
+/* B MEMBER FUNCTIONS */\\
+void                    \_1B\_v4init\_P1B\_(B *\_\_self)\\
+\{\\
+\tab   \_1A\_v4init\_P1A\_((A *)\_\_self);\\
+\tab   \_\_self->\_1B\_i5value\_ = 124;\\
+\tab   \_\_self->\_\_vtable = \&\_1B\_vtable\_;\\
+\}\\
+
+\noindent
+void                    \_1B\_v5print\_P1B\_(B *\_\_self)\\
+\{\\
+\tab   int                   value;\\
+\tab   const char            *name = \_\_self->\_\_vtable->\_Pc17name\_of\_interface\_v\_();\\
+
+\noindent
+\tab   value = \_\_self->\_1B\_i5value\_;\\
+\tab   printf("\%d \%s", value, name);\\
+\}\\
+
+\noindent
+/* B DEFAULT FUNCTIONS */\\
+const char              *\_1B\_Pc17name\_of\_interface\_v\_(void)\\
+\{\\
+\tab   return ("B");\\
+\}\\
+
+\noindent
+B                       *\_1B\_P1B5alloc\_v\_(void)\\
+\{\\
+\tab   return (malloc(sizeof(B)));\\
+\}\\
+
+\noindent
+B                       *\_1B\_P1B3new\_v\_(void)\\
+\{\\
+\tab   B                     *res;\\
+
+\noindent
+\tab   res = \_1B\_P1B5alloc\_v\_();\\
+\tab   \_1B\_v4init\_P1B\_(res);\\
+\tab   return (res);\\
+\}\\
+
+\noindent
+void                    \_1B\_v6delete\_P1B\_(B *\_\_self)\\
+\{\\
+\tab   \_1B\_v5clean\_P1B\_(\_\_self);\\
+\tab   free(\_\_self);\\
+\}\\
+
+\noindent
+void                    \_1B\_v5clean\_P1B\_(B *\_\_self)\\
+\{\\
+\}\\
+/* !B IMPLEMENTATION */\\
+
+\end{document}

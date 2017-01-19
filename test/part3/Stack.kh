@@ -1,0 +1,21 @@
+/*
+** Stack.kh for  in /home/zordan_n/Kooc/test/part3
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Sat Oct 15 23:07:08 2016 Nicolas Zordan
+** Last update Sat Oct 15 23:07:10 2016 Nicolas Zordan
+*/
+
+@class Stack
+{
+  @member {
+    int         size;
+    int         nbitem;
+  }
+
+  int           nbstack = 0;
+  @member void  init(int);
+  @member int   nbitem();
+}

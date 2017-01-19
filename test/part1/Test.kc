@@ -1,0 +1,44 @@
+/*
+** test.kc for test in /home/zordan_n/Kooc/test
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Fri Sep 30 14:25:11 2016 Nicolas Zordan
+   Last update Wed Oct 19 03:57:52 2016 alice
+*/
+
+#include <stdlib.h>
+#include <stdio.h>
+@import "Test.kh"
+@import "Test.kh"
+@import "Test.kh"
+@import "Test.kh"
+@import "Test.kh"
+
+@implementation Test
+{
+  void          f(void)
+  {
+    printf("coucou la moulinette\n");
+  }
+
+  int           f(int nb)
+  {
+    if (printf("NB = %d\n", nb))
+      return (false);
+    return (true);
+  }
+
+  int           f(float nb1, float nb2)
+  {
+    return ((int)(nb1 + nb2));
+  }
+
+  // char          *f(int nb)
+  // {
+  //   return (malloc(sizeof(char)) * ([Test f:4.2:4.3] * (int)@!(float)[Test a]));
+  // }
+}
+
+@implementation Toto { }

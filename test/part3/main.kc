@@ -1,0 +1,25 @@
+/*
+** main.kc for  in /home/zordan_n/Kooc/test/part2
+**
+** Made by Nicolas Zordan
+** Login   <zordan_n@epitech.net>
+**
+** Started on  Thu Oct 13 11:31:36 2016 Nicolas Zordan
+** Last update Sun Oct 16 00:00:59 2016 Nicolas Zordan
+*/
+
+@import "test_poly.kh"
+
+int             main(int ac, char **av)
+{
+  A             *a;
+
+  a = [A new];
+  [a print]; // affiche "42 A\n"
+  a = [B new];
+  [a print]; //affiche "124 B\n"
+  a = [C new];
+  [a print]; //affiche "666 C\n"
+  [A print :a]; //affiche "42 C\n"
+  return (0);
+}
